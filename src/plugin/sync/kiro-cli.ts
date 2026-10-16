@@ -1,6 +1,6 @@
 import Database from 'libsql'
 import { existsSync } from 'node:fs'
-import { extractRegionFromArn, normalizeRegion } from '../../constants'
+import { extractRegionFromArn, isValidRegion, normalizeRegion } from '../../constants'
 import { createDeterministicAccountId } from '../accounts'
 import * as logger from '../logger'
 import { kiroDb } from '../storage/sqlite'
@@ -57,7 +57,10 @@ export async function syncFromKiroCli() {
         // serviceRegion wins over data.region: kiro-cli stores data.region as the
         // OIDC region (often us-east-1) regardless of where the account actually lives.
         const serviceRegion = extractRegionFromArn(profileArn) || normalizeRegion(data.region)
-        const oidcRegion = serviceRegion
+        const oidcRegion =
+          (isIdc && typeof deviceReg?.region === 'string' && isValidRegion(deviceReg.region)
+            ? deviceReg.region
+            : undefined) || serviceRegion
         const startUrl: string | undefined =
           typeof data.start_url === 'string'
             ? data.start_url
@@ -160,8 +163,13 @@ export async function syncFromKiroCli() {
 
         const id = createDeterministicAccountId(resolvedEmail, authMethod, clientId, profileArn)
         const existingById = all.find((a) => a.id === id)
+        const regionMismatch =
+          !!existingById &&
+          ((existingById.region || undefined) !== serviceRegion ||
+            (existingById.oidc_region || undefined) !== oidcRegion)
         if (
           existingById &&
+          !regionMismatch &&
           existingById.is_healthy === 1 &&
           existingById.expires_at >= cliExpiresAt &&
           existingById.expires_at > Date.now()
