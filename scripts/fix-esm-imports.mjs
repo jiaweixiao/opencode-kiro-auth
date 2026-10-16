@@ -5,8 +5,9 @@
  */
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const DIST_DIR = resolve(import.meta.dirname, '..', 'dist')
+const DIST_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 
 function walk(dir) {
   const results = []
