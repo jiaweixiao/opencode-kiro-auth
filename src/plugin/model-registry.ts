@@ -1,7 +1,7 @@
 import { getSupportedEffortLevels, supportsEffort, THINKING_BUDGETS } from './effort.js'
 import { resolveKiroModel } from './models.js'
 
-type Modalities = {
+export type Modalities = {
   input: Array<'text' | 'image' | 'pdf'>
   output: ['text']
 }
@@ -13,7 +13,7 @@ const MULTIMODAL: Modalities = { input: ['text', 'image', 'pdf'], output: ['text
 const CONTEXT_200K = { context: 200000, output: 64000 }
 const CONTEXT_1M = { context: 1000000, output: 64000 }
 
-interface ModelSpec {
+export interface ModelSpec {
   /** Display name, without the credit multiplier suffix. */
   name: string
   /** Kiro credit multiplier, rendered into the display name. */
@@ -31,7 +31,7 @@ interface ModelSpec {
  * Models Kiro exposes, keyed by the OpenCode-facing model ID. Claude reasoning
  * uses `output_config.effort`; GPT-5.6 reasoning uses `reasoning.effort`.
  */
-const MODEL_SPECS: Record<string, ModelSpec> = {
+export const MODEL_SPECS: Record<string, ModelSpec> = {
   auto: { name: 'Auto', rate: '1.0x', limit: CONTEXT_200K, modalities: MULTIMODAL },
 
   // Claude Sonnet

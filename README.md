@@ -29,7 +29,23 @@ models with substantial trial quotas.
 
 ## Installation
 
-Add the plugin to your `opencode.json` or `opencode.jsonc`:
+The plugin supports both OpenCode generations from one package. Pick the section
+matching your version.
+
+### OpenCode 2.x (desktop, `opencode2`)
+
+```json
+{
+  "plugins": ["@zhafron/opencode-kiro-auth"]
+}
+```
+
+Note the plural key. V2 registers the `kiro` provider with every model Kiro
+exposes, and reasoning depth is selected through model **variants** rather than
+separate model IDs. Run `/models` to pick a model and `/variants` to change its
+reasoning level.
+
+### OpenCode 1.x (terminal)
 
 ```json
 {
@@ -37,9 +53,9 @@ Add the plugin to your `opencode.json` or `opencode.jsonc`:
 }
 ```
 
-That is the whole configuration. The plugin registers the `kiro` provider and
-advertises every model Kiro exposes, including a `-thinking` companion for each
-model that supports reasoning effort. Run `/models` to pick one.
+Singular key. V1 advertises a `-thinking` companion model for each
+reasoning-capable model, since the V1 model schema has no notion of a reasoning
+level.
 
 Defining `provider.kiro.models` yourself replaces the plugin's registry entirely.
 Only do that to rename or restrict models, and see the reasoning flags below if
@@ -47,9 +63,19 @@ any of them are `-thinking` models.
 
 ### Thinking Effort Configuration
 
-Every effort-capable Claude model gets a `-thinking` companion, already carrying
-the reasoning flags and an effort ladder as variants. Nothing to configure: pick a
-`-thinking` model and cycle its variants to change reasoning depth.
+On **V2**, every effort-capable model carries its effort ladder as variants:
+`low`, `medium`, `high`, and where the model accepts them, `xhigh` and `max`. The
+variant is applied before the request is built, so nothing needs configuring —
+select a model and cycle its variants.
+
+On **V1**, every effort-capable Claude model gets a `-thinking` companion,
+already carrying the reasoning flags and an effort ladder as variants. Nothing to
+configure: pick a `-thinking` model and cycle its variants to change reasoning
+depth.
+
+The sections below describe the V1 model-registry fields. V2 uses native
+`reasoning-start` / `reasoning-delta` / `reasoning-end` events and needs none of
+them.
 
 Each `-thinking` entry declares two fields that OpenCode needs in order to render
 reasoning:
@@ -143,12 +169,12 @@ setting is a global override for all supported models, not a per-model setting.
 
 ## Local plugin development
 
-The simplest way to test local changes is to point OpenCode directly at your local repo
-path in `opencode.json` or `opencode.jsonc`:
+Point OpenCode directly at your local repo path. Use the key matching your
+version — `plugins` on 2.x, `plugin` on 1.x:
 
 ```json
 {
-  "plugin": ["/path/to/opencode-kiro-auth"]
+  "plugins": ["/path/to/opencode-kiro-auth"]
 }
 ```
 
@@ -157,6 +183,10 @@ Then build and restart OpenCode to pick up changes:
 ```bash
 npm run build
 ```
+
+The build is required on V2 even for a local path: the provider runtime is
+loaded from `dist/`, resolved relative to the built plugin so the provider and
+the plugin always come from the same copy.
 
 ## Troubleshooting
 
