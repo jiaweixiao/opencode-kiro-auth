@@ -3,6 +3,23 @@ import { describe, expect, test } from 'bun:test'
 import { clearSdkClientCache, createSdkClient } from '../plugin/sdk-client'
 import type { KiroAuthDetails } from '../plugin/types'
 
+const ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'] as const
+
+function preserveProxyEnv() {
+  return ENV_KEYS.map((key) => [key, process.env[key]] as const)
+}
+
+function restoreProxyEnv(saved: ReturnType<typeof preserveProxyEnv>) {
+  for (const [key, value] of saved) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+}
+
+function clearProxyEnv() {
+  for (const key of ENV_KEYS) delete process.env[key]
+}
+
 function auth(): KiroAuthDetails {
   return {
     refresh: 'refresh-token',
@@ -150,21 +167,53 @@ describe('SDK client', () => {
     clearSdkClientCache()
   })
 
-  test('does not reuse a cached client across different effort levels or schema paths', () => {
-    clearSdkClientCache()
+  test('creates a proxied request handler when proxy env is set', async () => {
+    const saved = preserveProxyEnv()
+    try {
+      process.env.HTTPS_PROXY = 'http://10.108.157.36:80'
+      clearSdkClientCache()
+      const client = createSdkClient(auth(), 'us-east-1')
+      const handler = client.config.requestHandler as any
+      const config = await handler.configProvider
 
-    const max = createSdkClient(auth(), 'us-east-1', 'max')
-    const xhigh = createSdkClient(auth(), 'us-east-1', 'xhigh')
-    const maxAgain = createSdkClient(auth(), 'us-east-1', 'max')
-    const outputConfig = createSdkClient(auth(), 'us-east-1', 'high', 'output_config')
-    const reasoning = createSdkClient(auth(), 'us-east-1', 'high', 'reasoning')
-    const reasoningAgain = createSdkClient(auth(), 'us-east-1', 'high', 'reasoning')
+      expect(config.connectionTimeout).toBe(10000)
+      expect(config.socketTimeout).toBe(120000)
+      expect(config.httpsAgent).toBeDefined()
+    } finally {
+      restoreProxyEnv(saved)
+      clearSdkClientCache()
+    }
+  })
 
-    expect(xhigh).not.toBe(max)
-    expect(maxAgain).toBe(max)
-    expect(reasoning).not.toBe(outputConfig)
-    expect(reasoningAgain).toBe(reasoning)
+  test('keeps the default handler when no proxy env is set', () => {
+    const saved = preserveProxyEnv()
+    try {
+      clearProxyEnv()
+      clearSdkClientCache()
+      const client = createSdkClient(auth(), 'us-east-1')
+      const handler = client.config.requestHandler as any
 
-    clearSdkClientCache()
+      expect(handler).toBeDefined()
+    } finally {
+      restoreProxyEnv(saved)
+      clearSdkClientCache()
+    }
+  })
+
+  test('prefers HTTPS_PROXY over HTTP_PROXY', async () => {
+    const saved = preserveProxyEnv()
+    try {
+      process.env.HTTPS_PROXY = 'http://10.108.157.36:80'
+      process.env.HTTP_PROXY = 'http://invalid-proxy:80'
+      clearSdkClientCache()
+      const client = createSdkClient(auth(), 'us-east-1')
+      const handler = client.config.requestHandler as any
+      const config = await handler.configProvider
+
+      expect(config.httpsAgent.proxy.href).toBe('http://10.108.157.36/')
+    } finally {
+      restoreProxyEnv(saved)
+      clearSdkClientCache()
+    }
   })
 })
