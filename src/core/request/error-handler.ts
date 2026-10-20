@@ -189,7 +189,10 @@ export class ErrorHandler {
 
   private isNetworkError(e: any): boolean {
     return (
-      e instanceof Error && /econnreset|etimedout|enotfound|network|fetch failed/i.test(e.message)
+      e instanceof Error &&
+      /econnreset|etimedout|enotfound|network|fetch failed|TimeoutError|socket connection was closed unexpectedly|request socket timed out/i.test(
+        e.message
+      )
     )
   }
 

@@ -27,8 +27,10 @@ const REASONING_BLOCK_ID = 'reasoning-0'
 export async function* adaptStream(
   sdkResponse: unknown,
   model: string,
-  toolNameMap?: ToolNameMap
+  toolNameMap?: ToolNameMap,
+  signal?: AbortSignal
 ): AsyncGenerator<LLMEvent> {
+  if (signal?.aborted) throw new Error('Kiro request aborted')
   const eventStream = (sdkResponse as { generateAssistantResponseResponse?: AsyncIterable<any> })
     ?.generateAssistantResponseResponse
   if (!eventStream) throw new Error('SDK response has no event stream')
@@ -80,6 +82,7 @@ export async function* adaptStream(
   }
 
   for await (const event of eventStream) {
+    if (signal?.aborted) throw new Error('Kiro request aborted')
     if (event.reasoningContentEvent) {
       // Native reasoning. `redactedContent` is provider-encrypted with no
       // readable form, so only `text` is surfaced.
