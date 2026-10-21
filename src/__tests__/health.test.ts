@@ -30,6 +30,15 @@ describe('isPermanentError', () => {
     expect(isPermanentError('error: invalid_grant')).toBe(true)
   })
 
+  test('detects invalid_request (OIDC session expired)', () => {
+    expect(isPermanentError('invalid_request')).toBe(true)
+    expect(isPermanentError('Refresh failed: Invalid request')).toBe(true)
+  })
+
+  test('detects invalid_client', () => {
+    expect(isPermanentError('invalid_client')).toBe(true)
+  })
+
   test('detects ExpiredTokenException', () => {
     expect(isPermanentError('ExpiredTokenException')).toBe(true)
     expect(isPermanentError('AWS: ExpiredTokenException: token expired')).toBe(true)

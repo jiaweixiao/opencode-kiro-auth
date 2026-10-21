@@ -28,6 +28,8 @@ const logToast: ToastFunction = (message, variant) => {
   else logger.log(message)
 }
 
+const RECOVERY_SYNC_INTERVAL_MS = 60000
+
 export interface KiroExecution {
   sdkResponse: unknown
   prepared: SdkPreparedRequest
@@ -51,7 +53,7 @@ export class KiroExecutor {
   private constructor(
     private readonly config: KiroConfig,
     private readonly accountManager: AccountManager,
-    repository: AccountRepository
+    private readonly repository: AccountRepository
   ) {
     this.accountSelector = new AccountSelector(accountManager, config, syncFromKiroCli, repository)
     this.tokenRefresher = new TokenRefresher(config, accountManager, syncFromKiroCli, repository)
@@ -84,8 +86,11 @@ export class KiroExecutor {
       if (!check.canContinue) throw new Error(check.error)
 
       if (this.allAccountsPermanentlyUnhealthy()) {
+        await this.tryRecoverFromKiroCli()
+      }
+      if (this.allAccountsPermanentlyUnhealthy()) {
         throw new Error(
-          'All Kiro accounts are permanently unhealthy. Re-authenticate with the Kiro CLI or OpenCode 1.x.'
+          'All Kiro accounts are permanently unhealthy. Re-authenticate with the Kiro CLI'
         )
       }
 
@@ -204,6 +209,32 @@ export class KiroExecutor {
     const accounts = this.accountManager.getAccounts()
     if (accounts.length === 0) return false
     return accounts.every((a) => !a.isHealthy && isPermanentError(a.unhealthyReason))
+  }
+
+  private lastRecoverySyncAttempt = 0
+
+  /**
+   * V2 has no startup sync, so an account marked permanently unhealthy would
+   * stay unusable until the host restarts — even after the user
+   * re-authenticates the Kiro CLI. When every account is dead, attempt one
+   * CLI sync (throttled) before giving up: a fresh login imports new
+   * credentials and revives the pool.
+   */
+  private async tryRecoverFromKiroCli(): Promise<void> {
+    if (!this.config.auto_sync_kiro_cli) return
+    const now = Date.now()
+    if (now - this.lastRecoverySyncAttempt < RECOVERY_SYNC_INTERVAL_MS) return
+    this.lastRecoverySyncAttempt = now
+    try {
+      await syncFromKiroCli()
+      this.repository.invalidateCache()
+      const accounts = await this.repository.findAll()
+      for (const a of accounts) this.accountManager.addAccount(a)
+    } catch (e) {
+      logger.warn('Recovery sync from Kiro CLI failed', {
+        message: e instanceof Error ? e.message : String(e)
+      })
+    }
   }
 
   private sleep(ms: number): Promise<void> {
