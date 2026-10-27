@@ -7,6 +7,10 @@
 OpenCode plugin for AWS Kiro (CodeWhisperer) providing access to Claude and GPT-5.6
 models with substantial trial quotas.
 
+> **`no-proxy` branch:** Kiro requests always connect directly and ignore
+> `HTTP_PROXY`, `HTTPS_PROXY`, and related environment variables. Use the main
+> branch if your network requires an HTTP proxy.
+
 ## Features
 
 - **Multiple Auth Methods**: Supports AWS Builder ID (IDC), IAM Identity Center (custom

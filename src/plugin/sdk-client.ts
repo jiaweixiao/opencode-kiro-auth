@@ -1,6 +1,5 @@
 import { CodeWhispererStreamingClient } from '@aws/codewhisperer-streaming-client'
 import { NodeHttpHandler } from '@smithy/node-http-handler'
-import { HttpsProxyAgent } from 'https-proxy-agent'
 import { KIRO_CONSTANTS } from '../constants.js'
 import { buildEffortRequestFields, type EffortSchemaPath } from './effort.js'
 import type { Effort, KiroAuthDetails } from './types'
@@ -21,21 +20,9 @@ const KIRO_CLI_MAX_ATTEMPTS = 3
 const CONNECTION_TIMEOUT_MS = 10000
 const STREAM_IDLE_TIMEOUT_MS = 120000
 
-function getProxyUrl(): string | undefined {
-  return (
-    process.env.HTTPS_PROXY ||
-    process.env.https_proxy ||
-    process.env.HTTP_PROXY ||
-    process.env.http_proxy
-  )
-}
-
-function createRequestHandler(): NodeHttpHandler | undefined {
-  const proxy = getProxyUrl()
-  if (!proxy) return undefined
-
+/** This branch deliberately bypasses HTTP(S)_PROXY and connects directly. */
+function createRequestHandler(): NodeHttpHandler {
   return new NodeHttpHandler({
-    httpsAgent: new HttpsProxyAgent(proxy),
     connectionTimeout: CONNECTION_TIMEOUT_MS,
     socketTimeout: STREAM_IDLE_TIMEOUT_MS
   })
@@ -48,7 +35,7 @@ export function createSdkClient(
   effortSchemaPath?: EffortSchemaPath
 ): CodeWhispererStreamingClient {
   const resolvedSchemaPath = effort ? (effortSchemaPath ?? 'output_config') : undefined
-  const cacheKey = `${region}:${auth.email || 'default'}:${effort || 'none'}:${resolvedSchemaPath || 'none'}:${getProxyUrl() || 'none'}`
+  const cacheKey = `${region}:${auth.email || 'default'}:${effort || 'none'}:${resolvedSchemaPath || 'none'}`
   const cached = clientCache.get(cacheKey)
 
   if (

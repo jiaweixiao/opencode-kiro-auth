@@ -167,7 +167,7 @@ describe('SDK client', () => {
     clearSdkClientCache()
   })
 
-  test('creates a proxied request handler when proxy env is set', async () => {
+  test('bypasses proxy env and preserves direct-request timeouts', async () => {
     const saved = preserveProxyEnv()
     try {
       process.env.HTTPS_PROXY = 'http://10.108.157.36:80'
@@ -178,39 +178,24 @@ describe('SDK client', () => {
 
       expect(config.connectionTimeout).toBe(10000)
       expect(config.socketTimeout).toBe(120000)
-      expect(config.httpsAgent).toBeDefined()
+      expect(config.httpsAgent?.proxy).toBeUndefined()
     } finally {
       restoreProxyEnv(saved)
       clearSdkClientCache()
     }
   })
 
-  test('keeps the default handler when no proxy env is set', () => {
+  test('uses a direct handler when no proxy env is set', async () => {
     const saved = preserveProxyEnv()
     try {
       clearProxyEnv()
       clearSdkClientCache()
       const client = createSdkClient(auth(), 'us-east-1')
       const handler = client.config.requestHandler as any
-
-      expect(handler).toBeDefined()
-    } finally {
-      restoreProxyEnv(saved)
-      clearSdkClientCache()
-    }
-  })
-
-  test('prefers HTTPS_PROXY over HTTP_PROXY', async () => {
-    const saved = preserveProxyEnv()
-    try {
-      process.env.HTTPS_PROXY = 'http://10.108.157.36:80'
-      process.env.HTTP_PROXY = 'http://invalid-proxy:80'
-      clearSdkClientCache()
-      const client = createSdkClient(auth(), 'us-east-1')
-      const handler = client.config.requestHandler as any
       const config = await handler.configProvider
 
-      expect(config.httpsAgent.proxy.href).toBe('http://10.108.157.36/')
+      expect(handler).toBeDefined()
+      expect(config.httpsAgent?.proxy).toBeUndefined()
     } finally {
       restoreProxyEnv(saved)
       clearSdkClientCache()
