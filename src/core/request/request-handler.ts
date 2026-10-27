@@ -79,7 +79,7 @@ export class RequestHandler {
     showToast: ToastFunction
   ): Promise<Response> {
     const body = init?.body ? JSON.parse(init.body) : {}
-    const model = this.extractModel(url) || body.model || 'claude-sonnet-4-5'
+    const model = this.extractModel(url) || body.model || 'claude-sonnet-5'
     const think =
       model.endsWith('-thinking') || !!body.providerOptions?.thinkingConfig || !!body.thinkingConfig
     const budget =

@@ -55,7 +55,7 @@ function buildModel(modelID: string, spec: ModelSpec, providerPackage: string): 
   const base = Model.Info.default(providerID, Model.ID.make(modelID))
 
   const kiroModel = resolveKiroModel(modelID)
-  const reasoning = spec.effort !== undefined && supportsEffort(kiroModel)
+  const reasoning = supportsEffort(kiroModel)
 
   return {
     ...base,

@@ -28,6 +28,13 @@ describe('resolveKiroModel', () => {
     expect(resolveKiroModel('claude-sonnet-5-1m-thinking')).toBe('claude-sonnet-5-1m')
   })
 
+  // The 5.5 slugs match their wire ID exactly, unlike the dash-for-dot Claude
+  // slugs, so one MODEL_SPECS lookup serves both ID spaces.
+  test('resolves claude 5.5 slugs to the identical wire ID', () => {
+    expect(resolveKiroModel('claude-opus-5.5')).toBe('claude-opus-5.5')
+    expect(resolveKiroModel('claude-sonnet-5.5')).toBe('claude-sonnet-5.5')
+  })
+
   test('rejects removed qwen3-coder-480b slug', () => {
     expect(() => resolveKiroModel('qwen3-coder-480b')).toThrow(
       'Unsupported model: qwen3-coder-480b'

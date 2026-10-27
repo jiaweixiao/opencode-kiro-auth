@@ -66,9 +66,23 @@ describe('v2 provider registration', () => {
   })
 })
 
+/** The exact set `kiro-cli` offers that this plugin advertises. */
+const ADVERTISED_MODELS = [
+  'claude-opus-5.5',
+  'claude-sonnet-5.5',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'claude-opus-5',
+  'claude-sonnet-5'
+]
+
 describe('v2 reasoning models', () => {
   const models = buildV2Models()
   const byID = new Map(models.map((model) => [model.id as string, model]))
+
+  test('advertises exactly the models kiro-cli offers', () => {
+    expect(models.map((model) => model.id as string).sort()).toEqual([...ADVERTISED_MODELS].sort())
+  })
 
   // V1 advertised reasoning as separate `-thinking` model IDs. V2 carries
   // `variants`, so the companions are gone.
@@ -76,38 +90,28 @@ describe('v2 reasoning models', () => {
     expect(models.filter((model) => (model.id as string).endsWith('-thinking'))).toHaveLength(0)
   })
 
-  test('exposes the full effort ladder on xhigh-capable Claude models', () => {
-    expect(byID.get('claude-sonnet-5')?.variants.map((v) => v.id as string)).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-      'max'
-    ])
-  })
-
-  test('omits xhigh on Claude models that do not accept it', () => {
-    expect(byID.get('claude-sonnet-4-5')?.variants.map((v) => v.id as string)).toEqual([
-      'low',
-      'medium',
-      'high',
-      'max'
-    ])
+  test('exposes the full effort ladder on Claude models', () => {
+    for (const id of ['claude-opus-5.5', 'claude-sonnet-5.5', 'claude-opus-5', 'claude-sonnet-5']) {
+      expect(byID.get(id)?.variants.map((v) => v.id as string)).toEqual([
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+        'max'
+      ])
+    }
   })
 
   // GPT-5.6 uses reasoning.effort and rejects the plugin's `max` level.
   test('omits max on GPT models', () => {
-    expect(byID.get('gpt-5.6-sol')?.variants.map((v) => v.id as string)).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh'
-    ])
-  })
-
-  test('leaves non-reasoning models without variants', () => {
-    expect(byID.get('claude-haiku-4-5')?.variants).toEqual([])
-    expect(byID.get('glm-5')?.variants).toEqual([])
+    for (const id of ['gpt-5.6-sol', 'gpt-5.6-terra']) {
+      expect(byID.get(id)?.variants.map((v) => v.id as string)).toEqual([
+        'low',
+        'medium',
+        'high',
+        'xhigh'
+      ])
+    }
   })
 
   test('carries the effort level in variant settings', () => {
@@ -119,18 +123,21 @@ describe('v2 reasoning models', () => {
 describe('v2 model metadata', () => {
   const byID = new Map(buildV2Models().map((model) => [model.id as string, model]))
 
-  test('preserves context and output limits', () => {
-    expect(byID.get('claude-sonnet-5')?.limit).toEqual({ context: 1000000, output: 64000 })
-    expect(byID.get('gpt-5.6-sol')?.limit).toEqual({ context: 272000, output: 64000 })
+  test('advertises a 1M context window on every model', () => {
+    for (const id of ADVERTISED_MODELS) {
+      expect(byID.get(id)?.limit).toEqual({ context: 1000000, output: 64000 })
+    }
   })
 
   test('preserves input modalities', () => {
     expect(byID.get('claude-opus-5')?.capabilities.input).toEqual(['text', 'image', 'pdf'])
-    expect(byID.get('claude-haiku-4-5')?.capabilities.input).toEqual(['text', 'image'])
-    expect(byID.get('glm-5')?.capabilities.input).toEqual(['text'])
+    expect(byID.get('claude-opus-5.5')?.capabilities.input).toEqual(['text', 'image', 'pdf'])
+    expect(byID.get('gpt-5.6-sol')?.capabilities.input).toEqual(['text'])
   })
 
   test('renders the credit multiplier into the display name', () => {
-    expect(byID.get('claude-opus-5')?.name).toBe('Claude Opus 5 (2.2x)')
+    expect(byID.get('claude-opus-5')?.name).toBe('Claude Opus 5 (2.20x)')
+    expect(byID.get('claude-opus-5.5')?.name).toBe('Claude Opus 5.5 (2.00x)')
+    expect(byID.get('gpt-5.6-sol')?.name).toBe('GPT-5.6 Sol (4.40x)')
   })
 })

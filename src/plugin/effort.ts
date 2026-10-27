@@ -26,7 +26,9 @@ const XHIGH_CAPABLE_MODELS = new Set([
   'claude-opus-4.7',
   'claude-opus-4.8',
   'claude-opus-5',
+  'claude-opus-5.5',
   'claude-sonnet-5',
+  'claude-sonnet-5.5',
   'claude-sonnet-5-1m',
   ...GPT_REASONING_MODELS
 ])

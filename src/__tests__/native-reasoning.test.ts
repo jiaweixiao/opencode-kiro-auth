@@ -92,7 +92,7 @@ describe('native reasoning stream', () => {
     expect(text).toBe('Final answer.')
   })
 
-  test('uses GPT-5.6 272K context size for streamed usage accounting', async () => {
+  test('uses the advertised GPT-5.6 1M context size for streamed usage accounting', async () => {
     const chunks: any[] = []
     for await (const chunk of transformSdkStream(
       streamOf([
@@ -107,7 +107,7 @@ describe('native reasoning stream', () => {
 
     const usage = chunks.find((chunk) => chunk.usage)?.usage
     expect(usage).toBeDefined()
-    expect(usage.prompt_tokens + usage.completion_tokens).toBe(27200)
+    expect(usage.prompt_tokens + usage.completion_tokens).toBe(100000)
   })
 
   test('ignores event types the transformer does not consume', async () => {

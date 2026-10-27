@@ -67,6 +67,7 @@ export const MODEL_MAPPING: Record<string, string> = {
   'claude-sonnet-5-thinking': 'claude-sonnet-5',
   'claude-sonnet-5-1m': 'claude-sonnet-5-1m',
   'claude-sonnet-5-1m-thinking': 'claude-sonnet-5-1m',
+  'claude-sonnet-5.5': 'claude-sonnet-5.5',
   // Claude Opus
   'claude-opus-4-5': 'claude-opus-4.5',
   'claude-opus-4-5-thinking': 'claude-opus-4.5',
@@ -80,6 +81,7 @@ export const MODEL_MAPPING: Record<string, string> = {
   'claude-opus-4-8-thinking': 'claude-opus-4.8',
   'claude-opus-5': 'claude-opus-5',
   'claude-opus-5-thinking': 'claude-opus-5',
+  'claude-opus-5.5': 'claude-opus-5.5',
   // Auto
   auto: 'auto',
   // OpenAI GPT-5.6
@@ -102,10 +104,18 @@ export const MODEL_MAPPING: Record<string, string> = {
 
 export const SUPPORTED_MODELS = Object.keys(MODEL_MAPPING)
 
-const LONG_CONTEXT_MODELS = new Set(Object.keys(MODEL_MAPPING).filter((k) => k.includes('-1m')))
-
+/**
+ * Kiro marks its long-context variants with a `-1m` suffix in both ID spaces,
+ * so a suffix test works for an OpenCode slug (`claude-sonnet-4-5-1m`) and for
+ * the resolved wire ID (`claude-sonnet-4.5-1m`) alike. Matching on the suffix
+ * rather than a fixed list keeps the two in step.
+ *
+ * A `-thinking` companion is stripped first, since `-1m` sits before it in
+ * slugs like `claude-sonnet-4-5-1m-thinking`.
+ */
 export function isLongContextModel(model: string): boolean {
-  return LONG_CONTEXT_MODELS.has(model)
+  const base = model.endsWith('-thinking') ? model.slice(0, -'-thinking'.length) : model
+  return base.endsWith('-1m')
 }
 
 export const KIRO_AUTH_SERVICE = {

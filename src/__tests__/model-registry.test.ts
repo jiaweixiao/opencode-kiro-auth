@@ -3,101 +3,105 @@ import { SUPPORTED_MODELS } from '../constants.js'
 import type { Effort } from '../plugin/config/schema.js'
 import { budgetToEffort, THINKING_BUDGETS } from '../plugin/effort.js'
 import { buildModelRegistry } from '../plugin/model-registry.js'
-import { resolveKiroModel } from '../plugin/models.js'
+import { getContextWindowSize, resolveKiroModel } from '../plugin/models.js'
 
 const registry = buildModelRegistry() as Record<string, any>
 
-const thinkingIDs = Object.keys(registry).filter((id) => id.endsWith('-thinking'))
+/** The exact set `kiro-cli` offers that this plugin advertises. */
+const ADVERTISED_MODELS = [
+  'claude-opus-5.5',
+  'claude-sonnet-5.5',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'claude-opus-5',
+  'claude-sonnet-5'
+]
+
+const GPT_MODELS = ['gpt-5.6-sol', 'gpt-5.6-terra']
+
 const reasoningIDs = Object.entries(registry)
   .filter(([, model]) => model.reasoning === true)
   .map(([id]) => id)
-const XHIGH_MODELS = [
-  'claude-opus-4-7-thinking',
-  'claude-opus-4-8-thinking',
-  'claude-opus-5-thinking',
-  'claude-sonnet-5-thinking',
-  'gpt-5.6-sol',
-  'gpt-5.6-terra',
-  'gpt-5.6-luna'
-]
 
 describe('model registry', () => {
+  test('advertises exactly the models kiro-cli offers', () => {
+    expect(Object.keys(registry).sort()).toEqual([...ADVERTISED_MODELS].sort())
+  })
+
   test('every advertised model is resolvable to a Kiro model ID', () => {
     for (const modelID of Object.keys(registry)) {
       expect(SUPPORTED_MODELS).toContain(modelID)
     }
   })
 
-  test('advertises a thinking companion for each effort-capable Claude model', () => {
-    expect(thinkingIDs.sort()).toEqual(
-      [
-        'claude-opus-4-5-thinking',
-        'claude-opus-4-6-thinking',
-        'claude-opus-4-7-thinking',
-        'claude-opus-4-8-thinking',
-        'claude-opus-5-thinking',
-        'claude-sonnet-4-5-thinking',
-        'claude-sonnet-4-6-thinking',
-        'claude-sonnet-5-thinking'
-      ].sort()
-    )
+  // Reasoning depth is selected through variants on the base model. The older
+  // `-thinking` companions still resolve for existing sessions but must not be
+  // advertised, or the picker shows each model twice.
+  test('advertises no -thinking companion models', () => {
+    expect(Object.keys(registry).filter((id) => id.endsWith('-thinking'))).toEqual([])
   })
 
-  test('advertises exact GPT-5.6 base IDs as native reasoning models', () => {
-    expect(registry['gpt-5.6-sol']).toMatchObject({
-      name: 'GPT-5.6 Sol (2.4x)',
-      limit: { context: 272000, output: 64000 },
-      reasoning: true,
-      interleaved: { field: 'reasoning_content' }
-    })
-    expect(registry['gpt-5.6-terra']).toMatchObject({
-      name: 'GPT-5.6 Terra (1.0x)',
-      limit: { context: 272000, output: 64000 },
-      reasoning: true
-    })
-    expect(registry['gpt-5.6-luna']).toMatchObject({
-      name: 'GPT-5.6 Luna (0.1x)',
-      limit: { context: 272000, output: 64000 },
-      reasoning: true
-    })
+  test('renders the credit multiplier into the display name', () => {
+    expect(registry['claude-opus-5.5'].name).toBe('Claude Opus 5.5 (2.00x)')
+    expect(registry['claude-sonnet-5.5'].name).toBe('Claude Sonnet 5.5 (1.30x)')
+    expect(registry['gpt-5.6-sol'].name).toBe('GPT-5.6 Sol (4.40x)')
+    expect(registry['gpt-5.6-terra'].name).toBe('GPT-5.6 Terra (2.20x)')
+    expect(registry['claude-opus-5'].name).toBe('Claude Opus 5 (2.20x)')
+    expect(registry['claude-sonnet-5'].name).toBe('Claude Sonnet 5 (1.30x)')
+  })
 
-    for (const modelID of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
-      expect(registry[`${modelID}-thinking`]).toBeUndefined()
-      expect(Object.keys(registry[modelID].variants ?? {})).toEqual([
-        'low',
-        'medium',
-        'high',
-        'xhigh'
-      ])
-      expect(registry[modelID].variants?.max).toBeUndefined()
+  test('advertises a 1M context window on every model', () => {
+    for (const modelID of ADVERTISED_MODELS) {
+      expect(registry[modelID].limit).toEqual({ context: 1000000, output: 64000 })
     }
+  })
+
+  // The registry limit and the token accounting in the streaming paths read
+  // from different functions. They have to agree, or context usage is scaled
+  // against the wrong window.
+  test('token accounting uses the advertised context window', () => {
+    for (const modelID of ADVERTISED_MODELS) {
+      expect(getContextWindowSize(modelID)).toBe(registry[modelID].limit.context)
+      expect(getContextWindowSize(resolveKiroModel(modelID))).toBe(registry[modelID].limit.context)
+    }
+  })
+
+  test('carries input modalities', () => {
+    expect(registry['claude-opus-5'].modalities.input).toEqual(['text', 'image', 'pdf'])
+    expect(registry['gpt-5.6-sol'].modalities.input).toEqual(['text'])
   })
 
   describe('reasoning capability flags', () => {
     // Both are required: `reasoning` declares the capability, `interleaved.field`
     // tells OpenCode reasoning arrives as `reasoning_content` deltas. Missing
     // either one means reasoning chunks are silently dropped.
-    test('every reasoning model declares the reasoning_content field', () => {
+    test('every advertised model declares reasoning and the reasoning_content field', () => {
+      expect(reasoningIDs.sort()).toEqual([...ADVERTISED_MODELS].sort())
+
       for (const id of reasoningIDs) {
         expect(registry[id].reasoning).toBe(true)
         expect(registry[id].interleaved).toEqual({ field: 'reasoning_content' })
       }
     })
-
-    test('non-reasoning models declare neither', () => {
-      for (const model of Object.values(registry)) {
-        if (model.reasoning) continue
-        expect(model.reasoning).toBeUndefined()
-        expect(model.interleaved).toBeUndefined()
-      }
-    })
   })
 
   describe('reasoning variants', () => {
-    test('offers xhigh only on models Kiro documents as xhigh-capable', () => {
-      for (const id of reasoningIDs) {
-        const hasXHigh = Object.keys(registry[id].variants).includes('xhigh')
-        expect(hasXHigh).toBe(XHIGH_MODELS.includes(id))
+    test('offers the full ladder on Claude models', () => {
+      for (const id of ADVERTISED_MODELS.filter((m) => !GPT_MODELS.includes(m))) {
+        expect(Object.keys(registry[id].variants)).toEqual([
+          'low',
+          'medium',
+          'high',
+          'xhigh',
+          'max'
+        ])
+      }
+    })
+
+    // GPT-5.6 sends effort as `reasoning.effort` and rejects `max`.
+    test('omits max on GPT models', () => {
+      for (const id of GPT_MODELS) {
+        expect(Object.keys(registry[id].variants)).toEqual(['low', 'medium', 'high', 'xhigh'])
       }
     })
 
@@ -121,13 +125,5 @@ describe('model registry', () => {
         expect(budgets).toEqual([...budgets].sort((a, b) => a - b))
       }
     })
-  })
-
-  test('carries limit and modalities through to both entries', () => {
-    expect(registry['claude-opus-5'].limit).toEqual({ context: 1000000, output: 64000 })
-    expect(registry['claude-opus-5-thinking'].limit).toEqual(registry['claude-opus-5'].limit)
-    expect(registry['claude-opus-5-thinking'].modalities).toEqual(
-      registry['claude-opus-5'].modalities
-    )
   })
 })

@@ -20,8 +20,8 @@ models with substantial trial quotas.
 - **High-Performance Storage**: Efficient account and usage management using native Bun
   SQLite.
 - **Native Thinking Mode**: Streams Kiro's native reasoning to OpenCode's thinking
-  block, with the reasoning flags declared on every thinking model, so it renders
-  without any model configuration.
+  block, with the reasoning flags declared on every advertised model, so it
+  renders without any model configuration.
 - **Kiro Effort Mapping**: Maps OpenCode thinking budgets to Kiro's native effort
   levels automatically, using each model's supported effort ladder.
 - **Automated Recovery**: Exponential backoff for rate limits and automated token
@@ -40,8 +40,8 @@ matching your version.
 }
 ```
 
-Note the plural key. V2 registers the `kiro` provider with every model Kiro
-exposes, and reasoning depth is selected through model **variants** rather than
+Note the plural key. V2 registers the `kiro` provider with the models listed
+below, and reasoning depth is selected through model **variants** rather than
 separate model IDs. Run `/models` to pick a model and `/variants` to change its
 reasoning level.
 
@@ -53,31 +53,43 @@ reasoning level.
 }
 ```
 
-Singular key. V1 advertises a `-thinking` companion model for each
-reasoning-capable model, since the V1 model schema has no notion of a reasoning
-level.
+Singular key. V1 advertises the same models and carries each model's effort
+ladder as variants.
 
 Defining `provider.kiro.models` yourself replaces the plugin's registry entirely.
-Only do that to rename or restrict models, and see the reasoning flags below if
-any of them are `-thinking` models.
+Only do that to rename or restrict models, and copy the reasoning flags described
+below onto anything you define.
+
+## Models
+
+The advertised set tracks what `kiro-cli` currently offers. Every model has a 1M
+context window and selects reasoning depth through variants.
+
+| Model | Rate | Context | Variants |
+| ----- | ---- | ------- | -------- |
+| `claude-opus-5.5` | `2.00x` | `1M` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `claude-sonnet-5.5` | `1.30x` | `1M` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-5.6-sol` | `4.40x` | `1M` | `low`, `medium`, `high`, `xhigh` |
+| `gpt-5.6-terra` | `2.20x` | `1M` | `low`, `medium`, `high`, `xhigh` |
+| `claude-opus-5` | `2.20x` | `1M` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `claude-sonnet-5` | `1.30x` | `1M` | `low`, `medium`, `high`, `xhigh`, `max` |
+
+Kiro resolves more model IDs than this, including the older Claude 4.x models,
+the `-1m` long-context variants, `gpt-5.6-luna`, and the former `-thinking`
+companions. Those stay usable in existing sessions and in a hand-written
+`provider.kiro.models` override, but they are no longer offered in the picker.
 
 ### Thinking Effort Configuration
 
-On **V2**, every effort-capable model carries its effort ladder as variants:
-`low`, `medium`, `high`, and where the model accepts them, `xhigh` and `max`. The
-variant is applied before the request is built, so nothing needs configuring —
-select a model and cycle its variants.
-
-On **V1**, every effort-capable Claude model gets a `-thinking` companion,
-already carrying the reasoning flags and an effort ladder as variants. Nothing to
-configure: pick a `-thinking` model and cycle its variants to change reasoning
-depth.
+Every model carries its effort ladder as variants: `low`, `medium`, `high`,
+`xhigh`, and on Claude also `max`. The variant is applied before the request is
+built, so nothing needs configuring — select a model and cycle its variants.
 
 The sections below describe the V1 model-registry fields. V2 uses native
 `reasoning-start` / `reasoning-delta` / `reasoning-end` events and needs none of
 them.
 
-Each `-thinking` entry declares two fields that OpenCode needs in order to render
+Each V1 entry declares two fields that OpenCode needs in order to render
 reasoning:
 
 ```json
@@ -93,18 +105,18 @@ delta this plugin emits. If either is missing, OpenCode silently drops every
 reasoning chunk and no thinking block appears.
 
 If you override `provider.kiro.models` in your own config, you replace the
-plugin's registry wholesale — copy both fields onto any `-thinking` model you
+plugin's registry wholesale — copy both fields onto any reasoning model you
 define, or reasoning will stop rendering.
 
-Reasoning itself comes from the API: Kiro streams `reasoningContentEvent` on
-thinking models, and the plugin forwards each one as a `reasoning_content` delta.
-Nothing needs to be enabled for that. Models that instead inline reasoning as
-`<thinking>` tags in their answer are still handled, via a fallback scraper.
+Reasoning itself comes from the API: Kiro streams `reasoningContentEvent`, and
+the plugin forwards each one as a `reasoning_content` delta. Nothing needs to be
+enabled for that. Models that instead inline reasoning as `<thinking>` tags in
+their answer are still handled, via a fallback scraper.
 
 Variants set `thinkingConfig.thinkingBudget`, which the plugin maps to Kiro's
 native `effort` field. Bands are scaled to Kiro's real thinking ceiling
-(1024-128000 on opus-4.8/opus-5), so every effort level including `xhigh` is
-reachable from a budget alone:
+(1024-128000), so every effort level including `xhigh` is reachable from a budget
+alone:
 
 | OpenCode budget | Kiro effort |
 | --------------- | ----------- |
@@ -114,23 +126,11 @@ reachable from a budget alone:
 | `<= 98304` | `xhigh` |
 | `> 98304` | `max` |
 
-`xhigh` is only available on opus-4.7, opus-4.8, opus-5 and sonnet-5. Those models
-get a five-variant ladder; the rest get four, and a budget in the `xhigh` band is
-clamped to `max`.
-
-Kiro's GPT-5.6 tiers are advertised directly under their base IDs as native reasoning
-models:
-
-| Model | Rate | Advertised context | Variants |
-| ----- | ---- | ------------------ | -------- |
-| `gpt-5.6-sol` | `2.4x` | `272K` | `low`, `medium`, `high`, `xhigh` |
-| `gpt-5.6-terra` | `1.0x` | `272K` | `low`, `medium`, `high`, `xhigh` |
-| `gpt-5.6-luna` | `0.1x` | `272K` | `low`, `medium`, `high`, `xhigh` |
-
 GPT requests send effort as `reasoning.effort`, while Claude requests retain
 `output_config.effort`. GPT does not accept the plugin's `max` level, so a global
-`max` override is clamped to `xhigh`. Unlike Claude, GPT does not use a separate
-`-thinking` companion or receive the legacy `<thinking_mode>` system-prompt tags.
+`max` override and any budget above the `xhigh` band are both clamped to `xhigh`.
+Unlike Claude, GPT does not receive the legacy `<thinking_mode>` system-prompt
+tags.
 
 Use `~/.config/opencode/kiro.json` for plugin-wide behavior such as auth sync,
 account selection, retry limits, and `auto_effort_mapping`. A top-level `effort`
