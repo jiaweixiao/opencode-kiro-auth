@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+import os from 'os'
 import { RegionSchema } from './plugin/config/schema'
 import type { KiroRegion } from './plugin/types'
 
@@ -35,6 +37,28 @@ export function extractRegionFromArn(arn: string | undefined): KiroRegion | unde
   return isValidRegion(region) ? (region as KiroRegion) : undefined
 }
 
+export const KIRO_VERSION = '1.4.121'
+
+/**
+ * Kiro enforces a minimum IDE client version on `generateAssistantResponse`
+ * (403 FEATURE_NOT_SUPPORTED, "This version of Kiro is no longer supported").
+ * The accepted user-agent embeds the IDE version and a per-machine hash:
+ * `KiroIDE-<version>-<hash>`. Keep KIRO_VERSION in sync with the current
+ * stable release from https://prod.download.desktop.kiro.dev/stable/metadata-linux-x64-stable.json
+ */
+function kiroMachineHash(): string {
+  try {
+    return createHash('sha256')
+      .update(`${os.hostname()}:${os.userInfo().username}`)
+      .digest('hex')
+      .slice(0, 16)
+  } catch {
+    return '0000000000000000'
+  }
+}
+
+export const KIRO_UA_ID = `KiroIDE-${KIRO_VERSION}-${kiroMachineHash()}`
+
 export const KIRO_CONSTANTS = {
   REFRESH_URL: 'https://prod.{{region}}.auth.desktop.kiro.dev/refreshToken',
   REFRESH_IDC_URL: 'https://oidc.{{region}}.amazonaws.com/token',
@@ -42,7 +66,7 @@ export const KIRO_CONSTANTS = {
   USAGE_LIMITS_URL: 'https://q.{{region}}.amazonaws.com/getUsageLimits',
   DEFAULT_REGION: 'us-east-1' as KiroRegion,
   AXIOS_TIMEOUT: 120000,
-  USER_AGENT: 'KiroIDE',
+  USER_AGENT: KIRO_UA_ID,
   SDK_VERSION: '3.738.0',
   SDK_VERSION_USAGE: '3.0.0',
   CHAT_TRIGGER_TYPE_MANUAL: 'MANUAL',

@@ -1,4 +1,4 @@
-import { KIRO_CONSTANTS } from '../constants.js'
+import { KIRO_CONSTANTS, KIRO_UA_ID } from '../constants.js'
 import { accessTokenExpired } from '../kiro/auth.js'
 import type { AccountManager } from './accounts.js'
 import * as logger from './logger.js'
@@ -57,7 +57,8 @@ export async function kiroWebSearch(
       Authorization: `Bearer ${auth.access}`,
       'Content-Type': 'application/x-amz-json-1.0',
       'X-Amz-Target': MCP_TARGET,
-      'x-amzn-kiro-agent-mode': 'vibe'
+      'x-amzn-kiro-agent-mode': 'vibe',
+      'user-agent': `aws-sdk-js/3.738.0 ${KIRO_UA_ID}`
     },
     body: JSON.stringify({
       profileArn: auth.profileArn,
