@@ -12,6 +12,22 @@ interface TokenRefresherConfig {
   token_expiry_buffer_ms: number
   auto_sync_kiro_cli: boolean
   account_selection_strategy: 'sticky' | 'round-robin' | 'lowest-usage'
+  rate_limit_max_retries: number
+  rate_limit_retry_delay_ms: number
+}
+
+/**
+ * A refresh failure caused by the network rather than by bad credentials.
+ * These are retryable: the same token refresh succeeds a moment later once
+ * the connection recovers. Permanent auth errors (invalid grant, expired
+ * client, `invalid_request`) must NOT match this.
+ */
+function isTransientNetworkError(error: unknown): boolean {
+  if (error instanceof KiroTokenRefreshError && error.code === 'NETWORK_ERROR') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return /econnreset|etimedout|econnrefused|enotfound|socket|network|fetch failed|timeouterror|certificate/i.test(
+    message
+  )
 }
 
 export class TokenRefresher {
@@ -32,7 +48,7 @@ export class TokenRefresher {
     }
 
     try {
-      const newAuth = await refreshAccessToken(auth)
+      const newAuth = await this.refreshWithRetry(auth, showToast)
       this.accountManager.updateFromAuth(account, newAuth)
       // Persist only the updated account instead of all accounts — avoids
       // invalidating the whole AccountCache on every token refresh.
@@ -41,6 +57,32 @@ export class TokenRefresher {
     } catch (e: any) {
       return await this.handleRefreshError(e, account, showToast)
     }
+  }
+
+  /**
+   * Retry transient network failures on the token-refresh endpoint. The Kiro
+   * auth/oidc hosts intermittently reset connections (`ECONNRESET`), and a
+   * single failed refresh used to kill the entire request as "unrecoverable".
+   * Permanent auth errors are rethrown immediately.
+   */
+  private async refreshWithRetry(auth: KiroAuthDetails, showToast: ToastFunction) {
+    let lastError: unknown
+    const attempts = this.config.rate_limit_max_retries + 1
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await refreshAccessToken(auth)
+      } catch (e: unknown) {
+        lastError = e
+        if (!isTransientNetworkError(e) || i === attempts - 1) throw e
+        const delay = this.config.rate_limit_retry_delay_ms * 2 ** i
+        showToast(
+          `Token refresh network error, retrying in ${Math.ceil(delay / 1000)}s...`,
+          'warning'
+        )
+        await this.sleep(delay)
+      }
+    }
+    throw lastError
   }
 
   async forceRefresh(account: ManagedAccount, auth: KiroAuthDetails): Promise<void> {
@@ -125,5 +167,9 @@ export class TokenRefresher {
       message: error instanceof Error ? error.message : String(error)
     })
     throw error
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 }

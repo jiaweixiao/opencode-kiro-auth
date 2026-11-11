@@ -77,7 +77,9 @@ const fakeRepo: any = {
 const config = {
   token_expiry_buffer_ms: 300000,
   auto_sync_kiro_cli: false,
-  account_selection_strategy: 'sticky' as const
+  account_selection_strategy: 'sticky' as const,
+  rate_limit_max_retries: 2,
+  rate_limit_retry_delay_ms: 1
 }
 
 const noopToast = () => {}

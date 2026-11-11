@@ -3,6 +3,9 @@ import { decodeRefreshToken, encodeRefreshToken } from '../kiro/auth'
 import { KiroTokenRefreshError } from './errors'
 import type { KiroAuthDetails, RefreshParts } from './types'
 
+/** Hard cap on a single refresh request so a stalled connection can't hang the retry loop. */
+const REFRESH_FETCH_TIMEOUT_MS = 15000
+
 export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAuthDetails> {
   const p = decodeRefreshToken(auth.refresh)
   const isIdc = auth.authMethod === 'idc'
@@ -31,18 +34,26 @@ export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAut
     : `aws-sdk-js/3.0.0 ${KIRO_UA_ID} os/macos lang/js md/nodejs/18.0.0`
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'amz-sdk-request': 'attempt=1; max=1',
-        'x-amzn-kiro-agent-mode': 'vibe',
-        'user-agent': ua,
-        Connection: 'close'
-      },
-      body: JSON.stringify(requestBody)
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REFRESH_FETCH_TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'amz-sdk-request': 'attempt=1; max=1',
+          'x-amzn-kiro-agent-mode': 'vibe',
+          'user-agent': ua,
+          Connection: 'close'
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
 
     if (!res.ok) {
       const txt = await res.text()
