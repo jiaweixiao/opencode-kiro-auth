@@ -55,7 +55,7 @@ export class TokenRefresher {
       await this.repository.save(account)
       return { account, shouldContinue: false }
     } catch (e: any) {
-      return await this.handleRefreshError(e, account, showToast)
+      return await this.handleRefreshError(e, account, auth, showToast)
     }
   }
 
@@ -116,6 +116,7 @@ export class TokenRefresher {
   private async handleRefreshError(
     error: any,
     account: ManagedAccount,
+    auth: KiroAuthDetails,
     showToast: ToastFunction
   ): Promise<{ account: ManagedAccount; shouldContinue: boolean }> {
     logger.error('Token refresh failed', {
@@ -159,6 +160,21 @@ export class TokenRefresher {
       this.accountManager.markUnhealthy(account, error.code || error.message)
       await this.repository.batchSave(this.accountManager.getAccounts())
       return { account, shouldContinue: true }
+    }
+
+    // Last resort: the refresh failed but the access token is not hard-expired
+    // yet (we only start refreshing inside the buffer window). Fall back to the
+    // current token instead of killing the request — the server can still accept
+    // it, and the next request will retry the refresh. Applies to exhausted
+    // transient retries as well as any unknown non-auth error.
+    if (!accessTokenExpired(auth, 0)) {
+      logger.warn('Token refresh failed; using current token as fallback', {
+        email: account.email,
+        expiresAt: auth.expires,
+        now: Date.now()
+      })
+      showToast('Token refresh failed; continuing with current token.', 'warning')
+      return { account, shouldContinue: false }
     }
 
     logger.error('Token refresh unrecoverable', {
